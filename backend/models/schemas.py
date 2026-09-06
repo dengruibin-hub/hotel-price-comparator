@@ -1,4 +1,5 @@
 from datetime import date
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -28,6 +29,7 @@ class HotelPrice(BaseModel):
 class CompareResponse(BaseModel):
     hotel_name: str
     canonical_hotel_id: str
+    hotel_db_id: int | None = None
     matched_sources: list[str]
     match_score: float = Field(ge=0, le=1)
     check_in: date
