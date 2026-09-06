@@ -1,16 +1,10 @@
 from models.schemas import CompareRequest, CompareResponse, HotelPrice
-from providers.amap.provider import AmapProvider
-from providers.qunar.provider import QunarProvider
-from providers.zhixing.provider import ZhixingProvider
-
-
-PROVIDERS = [QunarProvider(), ZhixingProvider(), AmapProvider()]
+from services.search_service import search_and_compare
 
 
 def compare_prices(request: CompareRequest) -> CompareResponse:
-    prices: list[HotelPrice] = []
-    for provider in PROVIDERS:
-        prices.extend(provider.get_prices(request))
+    result = search_and_compare(request)
+    prices: list[HotelPrice] = result.prices
 
     if not prices:
         raise ValueError("No hotel prices returned")
@@ -19,7 +13,10 @@ def compare_prices(request: CompareRequest) -> CompareResponse:
     highest_price = max(item.price for item in prices)
 
     return CompareResponse(
-        hotel_name=request.hotel_name,
+        hotel_name=result.hotel.name,
+        canonical_hotel_id=result.hotel.source_hotel_id,
+        matched_sources=result.matched_sources,
+        match_score=result.match_score,
         check_in=request.check_in,
         check_out=request.check_out,
         guests=request.guests,
