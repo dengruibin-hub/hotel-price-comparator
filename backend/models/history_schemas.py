@@ -32,3 +32,26 @@ class PriceHistoryResponse(BaseModel):
     guests: int
     rooms: int
     snapshots: list[PriceSnapshotResponse]
+
+
+class PriceTrendPoint(BaseModel):
+    checked_at: datetime
+    qunar: float | None = None
+    zhixing: float | None = None
+    amap: float | None = None
+    lowest: float | None = None
+
+
+class PriceTrendResponse(BaseModel):
+    hotel_id: int
+    check_in: date
+    check_out: date
+    guests: int
+    rooms: int
+    days: int
+    current_lowest: float | None = None
+    historical_lowest: float | None = None
+    historical_average: float | None = None
+    change_from_lowest: float | None = None
+    change_from_average: float | None = None
+    points: list[PriceTrendPoint]
