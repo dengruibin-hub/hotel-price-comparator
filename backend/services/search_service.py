@@ -8,6 +8,7 @@ from services.hotel_matcher import match_candidates
 @dataclass
 class SearchResult:
     hotel: HotelCandidate
+    candidates: list[HotelCandidate]
     match_score: float
     matched_sources: list[str]
     prices: list[HotelPrice]
@@ -38,6 +39,7 @@ def search_and_compare(request: CompareRequest) -> SearchResult:
 
     return SearchResult(
         hotel=canonical,
+        candidates=candidates,
         match_score=match_score,
         matched_sources=sorted(candidate.source for candidate in matched_candidates),
         prices=prices,
