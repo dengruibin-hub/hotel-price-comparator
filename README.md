@@ -2,7 +2,7 @@
 
 比较同一家酒店在 **去哪儿、智行、高德** 的价格。
 
-> 当前版本是 MVP：三家平台先使用模拟数据，重点把“统一查询条件 → 酒店标准化/匹配 → 标准化价格 → 最低价比较”的流程跑通。真实平台数据接入将在后续通过官方或授权接口完成。
+> 当前版本是 MVP：三家平台先使用模拟数据，重点把“统一查询条件 → 酒店标准化/匹配 → 标准化价格 → 最低价比较 → 价格快照”的流程跑通。真实平台数据接入将在后续通过官方或授权接口完成。
 
 ## 当前功能
 
@@ -17,11 +17,12 @@
 - 酒店名称、地址、电话、经纬度标准化
 - 跨平台酒店匹配评分 `match_score`
 - PostgreSQL 数据库 Schema
+- 价格快照 Repository 与历史记录 Service
 - 基础自动化测试
 
-## 第三阶段：酒店标准化与跨平台匹配
+## 酒店标准化与跨平台匹配
 
-比价之前必须先确认三家平台展示的是同一家物理酒店。项目现在引入 canonical hotel（标准酒店）和 `HotelCandidate`（平台候选酒店）两个概念。
+比价之前必须先确认三家平台展示的是同一家物理酒店。项目引入 canonical hotel（标准酒店）和 `HotelCandidate`（平台候选酒店）两个概念。
 
 匹配 MVP 会综合以下信号：
 
@@ -32,7 +33,7 @@
 
 最终输出 `matched` 和 `match_score`。因此不会因为“酒店名称刚好相同”就直接判定为同一家。
 
-## 数据库设计
+## 数据库与价格历史
 
 `database/schema.sql` 使用 PostgreSQL 定义三张核心表：
 
@@ -40,7 +41,9 @@
 - `hotel_sources`：标准酒店与去哪儿/智行/高德酒店 ID 的映射，并保存 `match_score`
 - `price_snapshots`：每次价格查询的历史快照，包括房型、房价、税费、服务费、最终价格、早餐、取消政策和查询时间
 
-数据库 Schema 已先落地，当前 MVP 不要求本地必须安装 PostgreSQL。
+当前 `HotelPrice` 模型只有一个标准化最终价格，因此价格历史服务暂时将 `room_price` 和 `total_price` 设置为该价格，`tax` 与 `fees` 为 0。后续接入真实平台数据后，再拆分税费与服务费。
+
+数据库连接通过 `DATABASE_URL` 配置；没有配置 PostgreSQL 时，MVP 仍可使用内存 Repository 运行和测试。
 
 ## 项目结构
 
@@ -48,15 +51,22 @@
 hotel-price-comparator/
 ├── backend/
 │   ├── main.py
+│   ├── database.py
 │   ├── requirements.txt
+│   ├── .env.example
 │   ├── models/
 │   │   ├── hotel.py
 │   │   └── schemas.py
 │   ├── providers/
+│   ├── repositories/
+│   │   ├── hotel_repository.py
+│   │   └── price_repository.py
 │   └── services/
 │       ├── comparator.py
 │       ├── normalizer.py
-│       └── hotel_matcher.py
+│       ├── hotel_matcher.py
+│       ├── search_service.py
+│       └── price_history.py
 ├── database/
 │   └── schema.sql
 ├── frontend/
@@ -69,7 +79,8 @@ hotel-price-comparator/
 │   └── README.md
 └── tests/
     ├── test_comparator.py
-    └── test_hotel_matcher.py
+    ├── test_hotel_matcher.py
+    └── test_price_history.py
 ```
 
 ## 本地运行
@@ -133,7 +144,10 @@ pytest ../tests -q
 - [x] 前端搜索与价格展示
 - [x] 酒店标准化与跨平台酒店匹配 MVP
 - [x] PostgreSQL 数据库 Schema
-- [ ] 将酒店匹配接入实际搜索流程
-- [ ] 价格历史记录和价格监控
+- [x] 将酒店匹配接入实际搜索流程
+- [x] 价格历史记录基础 Repository / Service
+- [ ] PostgreSQL 价格快照持久化
+- [ ] 历史价格查询 API
+- [ ] 价格监控与降价提醒
 - [ ] 根据平台官方/授权接口接入真实价格
 - [ ] GitHub Actions 定时任务
