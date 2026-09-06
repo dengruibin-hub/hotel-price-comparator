@@ -13,11 +13,11 @@ def compare_prices(request: CompareRequest) -> CompareResponse:
     lowest = min(prices, key=lambda item: item.price)
     highest_price = max(item.price for item in prices)
 
-    # Persistence is optional so the original MVP remains runnable without PostgreSQL.
     from database import DATABASE_URL
 
+    hotel_db_id = None
     if DATABASE_URL:
-        persist_comparison(
+        hotel_db_id = persist_comparison(
             hotel=result.hotel,
             candidates=result.candidates,
             match_score=result.match_score,
@@ -31,6 +31,7 @@ def compare_prices(request: CompareRequest) -> CompareResponse:
     return CompareResponse(
         hotel_name=result.hotel.name,
         canonical_hotel_id=result.hotel.source_hotel_id,
+        hotel_db_id=hotel_db_id,
         matched_sources=result.matched_sources,
         match_score=result.match_score,
         check_in=request.check_in,
