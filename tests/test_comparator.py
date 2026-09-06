@@ -1,7 +1,7 @@
 from datetime import date
 
-from services.comparator import compare_prices
 from models.schemas import CompareRequest
+from services.comparator import compare_prices
 
 
 def test_compare_prices_returns_three_sources_and_lowest_price():
@@ -21,3 +21,6 @@ def test_compare_prices_returns_three_sources_and_lowest_price():
     assert result.lowest_source == "zhixing"
     assert result.highest_price == 620
     assert result.savings == 52
+    assert result.canonical_hotel_id == "qunar-demo-001"
+    assert result.matched_sources == ["amap", "qunar", "zhixing"]
+    assert result.match_score >= 0.72
