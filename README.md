@@ -1,133 +1,44 @@
-# 酒店价格比价器
+# Hotel Price Comparator
 
-比较同一家酒店在 **去哪儿、智行、高德** 的价格。
+比较同一家酒店在去哪儿、智行、高德的价格，并记录历史价格、趋势和目标价提醒。
 
-> 当前版本是 MVP：三家平台先使用模拟数据，重点把“统一查询条件 → 酒店标准化/匹配 → 标准化价格 → 最低价比较 → 价格快照 → 降价提醒”的流程跑通。真实平台数据接入将在后续通过官方或授权接口完成。
+## 当前能力
 
-## 当前功能
-
-- FastAPI 后端
-- `/health` 健康检查
-- `/api/compare` 酒店价格比价接口
-- 去哪儿、智行、高德 Provider 接口骨架
-- 统一价格数据结构
-- 最低价、最高价、节省金额计算
-- Next.js 前端搜索页面
-- 三家平台价格卡片与最低价高亮
-- 酒店名称、地址、电话、经纬度标准化
-- 跨平台酒店匹配评分 `match_score`
-- PostgreSQL 数据库 Schema
-- 价格快照 Repository 与历史记录 Service
+- 三平台标准化酒店候选匹配
+- 统一价格结构与最低价比较
+- PostgreSQL 酒店、平台映射和价格快照
 - 历史价格趋势 API
-- 降价提醒 API：创建、查询、启停、检查
-- GitHub Actions 定时检查骨架
-- 基础自动化测试
+- 目标价降价提醒 API
+- GitHub Actions 自动检查骨架
+- Docker Compose 一键启动 PostgreSQL、FastAPI 和 Next.js
+- GitHub Actions CI：后端 pytest + 前端 production build
 
-## 酒店标准化与跨平台匹配
+## 本地启动
 
-比价之前必须先确认三家平台展示的是同一家物理酒店。项目引入 canonical hotel（标准酒店）和 `HotelCandidate`（平台候选酒店）两个概念。
+### Docker
 
-匹配 MVP 会综合以下信号：
-
-1. 酒店名称相似度
-2. 地址相似度
-3. 经纬度距离
-4. 电话号码是否一致
-
-最终输出 `matched` 和 `match_score`。因此不会因为“酒店名称刚好相同”就直接判定为同一家。
-
-## 数据库与价格历史
-
-`database/schema.sql` 使用 PostgreSQL 定义三张核心表：
-
-- `hotels`：标准酒店信息
-- `hotel_sources`：标准酒店与去哪儿/智行/高德酒店 ID 的映射，并保存 `match_score`
-- `price_snapshots`：每次价格查询的历史快照，包括房型、房价、税费、服务费、最终价格、早餐、取消政策和查询时间
-
-当前 `HotelPrice` 模型只有一个标准化最终价格，因此价格历史服务暂时将 `room_price` 和 `total_price` 设置为该价格，`tax` 与 `fees` 为 0。后续接入真实平台数据后，再拆分税费与服务费。
-
-数据库连接通过 `DATABASE_URL` 配置；没有配置 PostgreSQL 时，MVP 仍可使用内存 Repository 运行和测试。
-
-## 降价提醒
-
-价格提醒以“酒店 + 入住条件 + 目标价格”为单位。当前提供：
-
-- `POST /api/price-alerts` 创建提醒
-- `GET /api/price-alerts` 查询提醒，可按 `hotel_id` 筛选
-- `PATCH /api/price-alerts/{id}?enabled=true|false` 启停提醒
-- `POST /api/price-alerts/check` 根据最近价格快照检查是否达到目标价
-
-数据库表位于 `database/migrations/002_price_alerts.sql`。
-
-GitHub Actions 工作流位于 `.github/workflows/price-monitor.yml`，支持手动触发和每天一次的定时检查。需要在仓库 Secrets 中配置 `MONITOR_API_URL`，例如部署后的后端基础地址。当前工作流只调用项目公开 API，不涉及登录、验证码或风控绕过。
-
-## 项目结构
-
-```text
-hotel-price-comparator/
-├── backend/
-│   ├── main.py
-│   ├── database.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   ├── models/
-│   │   ├── hotel.py
-│   │   ├── schemas.py
-│   │   ├── history_schemas.py
-│   │   └── alert_schemas.py
-│   ├── providers/
-│   ├── repositories/
-│   │   ├── hotel_repository.py
-│   │   ├── price_repository.py
-│   │   ├── postgres_hotel_repository.py
-│   │   ├── postgres_price_repository.py
-│   │   ├── alert_repository.py
-│   │   └── postgres_alert_repository.py
-│   └── services/
-│       ├── comparator.py
-│       ├── normalizer.py
-│       ├── hotel_matcher.py
-│       ├── search_service.py
-│       ├── price_history.py
-│       ├── price_trend.py
-│       └── price_alert.py
-├── database/
-│   ├── schema.sql
-│   └── migrations/
-│       └── 002_price_alerts.sql
-├── frontend/
-│   ├── app/
-│   ├── next.config.mjs
-│   ├── package.json
-│   └── README.md
-├── .github/workflows/
-│   └── price-monitor.yml
-└── tests/
+```bash
+cp .env.example .env
+docker compose up --build
 ```
 
-## 本地运行
+- 前端：http://localhost:3000
+- 后端：http://localhost:8000/health
+- PostgreSQL：localhost:5432
 
-### 1. 启动后端
+PostgreSQL 官方镜像会在首次初始化空数据目录时执行 `/docker-entrypoint-initdb.d` 下的 SQL 文件，因此本项目把 schema 和 migration 挂载到初始化目录。生产环境不要使用默认密码。
+
+### 手动启动
+
+后端：
 
 ```bash
 cd backend
-python -m venv .venv
-
-# macOS / Linux
-source .venv/bin/activate
-
-# Windows PowerShell
-# .venv\\Scripts\\Activate.ps1
-
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-后端文档：`http://127.0.0.1:8000/docs`
-
-### 2. 启动前端
-
-新开一个终端：
+前端：
 
 ```bash
 cd frontend
@@ -135,58 +46,21 @@ npm install
 npm run dev
 ```
 
-然后打开：`http://localhost:3000`
+## CI
 
-前端会将 `/api/compare` 代理到本地 FastAPI。
+每次 push 到 `main` 或提交 Pull Request 时，GitHub Actions 会运行：
 
-## API 示例
+- Python 3.12 + pytest
+- Node 20 + `npm ci` + `npm run build`
 
-### POST `/api/compare`
+## 数据接入原则
 
-```json
-{
-  "hotel_name": "上海外滩某酒店",
-  "check_in": "2026-10-10",
-  "check_out": "2026-10-12",
-  "guests": 2,
-  "rooms": 1
-}
-```
+目前平台价格仍是 MVP 模拟数据。真实去哪儿、智行、高德数据应优先通过官方或获得授权的接口接入，不绕过验证码、登录限制或反爬风控。
 
-### POST `/api/price-alerts`
+## 下一步
 
-```json
-{
-  "hotel_id": 1,
-  "check_in": "2026-10-10",
-  "check_out": "2026-10-12",
-  "guests": 2,
-  "rooms": 1,
-  "target_price": 550,
-  "currency": "CNY"
-}
-```
-
-## 测试
-
-```bash
-cd backend
-pytest ../tests -q
-```
-
-## 开发路线
-
-- [x] 后端比价 MVP
-- [x] 前端搜索与价格展示
-- [x] 酒店标准化与跨平台酒店匹配 MVP
-- [x] PostgreSQL 数据库 Schema
-- [x] 将酒店匹配接入实际搜索流程
-- [x] 价格历史记录基础 Repository / Service
-- [x] PostgreSQL 价格快照持久化
-- [x] 历史价格查询与趋势 API
-- [x] 价格监控与降价提醒 API
-- [x] GitHub Actions 定时监控骨架
-- [ ] 前端价格趋势图与降价提醒设置
-- [ ] 根据平台官方/授权接口接入真实价格
-- [ ] 部署后端与 PostgreSQL
-- [ ] 接入邮件/微信等通知渠道
+1. 修正并验证生产数据库 migration 顺序
+2. 接入真实授权数据源
+3. 增加通知渠道（邮件/企业微信等）
+4. 完善酒店跨平台匹配与人工确认
+5. 增加生产部署与监控
