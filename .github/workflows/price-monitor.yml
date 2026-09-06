@@ -1,0 +1,23 @@
+name: Price monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+jobs:
+  check-price-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configured API
+        env:
+          MONITOR_API_URL: ${{ secrets.MONITOR_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MONITOR_API_URL:-}" ]; then
+            echo "MONITOR_API_URL is not configured; skipping remote check."
+            exit 0
+          fi
+          curl --fail --silent --show-error --retry 2 \
+            -X POST "${MONITOR_API_URL%/}/api/price-alerts/check" \
+            -H "Accept: application/json"
