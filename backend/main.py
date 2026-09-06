@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 
@@ -58,7 +58,7 @@ def create_price_snapshot(request: PriceSnapshotCreate) -> PriceSnapshotResponse
         currency=request.currency,
         breakfast=request.breakfast,
         cancelable=request.cancelable,
-        checked_at=request.checked_at or __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+        checked_at=request.checked_at or datetime.now(timezone.utc),
     )
 
     try:
