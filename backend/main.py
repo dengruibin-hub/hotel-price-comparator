@@ -2,11 +2,18 @@ from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 
-from models.history_schemas import PriceHistoryResponse, PriceSnapshotCreate, PriceSnapshotResponse
+from models.history_schemas import (
+    PriceHistoryResponse,
+    PriceSnapshotCreate,
+    PriceSnapshotResponse,
+    PriceTrendPoint,
+    PriceTrendResponse,
+)
 from models.schemas import CompareRequest, CompareResponse
 from repositories.price_repository import InMemoryPriceSnapshotRepository, PriceSnapshot
 from repositories.postgres_price_repository import PostgresPriceSnapshotRepository
 from services.comparator import compare_prices
+from services.price_trend import build_price_trend
 
 app = FastAPI(
     title="Hotel Price Comparator",
@@ -14,7 +21,6 @@ app = FastAPI(
     description="Compare normalized hotel prices across Qunar, Zhixing and Amap.",
 )
 
-# The in-memory repository keeps the MVP runnable without PostgreSQL.
 _history_repository = InMemoryPriceSnapshotRepository()
 
 
@@ -129,4 +135,40 @@ def price_history(
             )
             for item in snapshots
         ],
+    )
+
+
+@app.get("/api/price-trend", response_model=PriceTrendResponse)
+def price_trend(
+    hotel_id: int = Query(ge=1),
+    check_in: date = Query(),
+    check_out: date = Query(),
+    guests: int = Query(default=2, ge=1),
+    rooms: int = Query(default=1, ge=1),
+    days: int = Query(default=30, ge=1, le=365),
+) -> PriceTrendResponse:
+    if check_out <= check_in:
+        raise HTTPException(status_code=422, detail="check_out must be after check_in")
+
+    try:
+        snapshots = get_history_repository().list_history(
+            hotel_id, check_in, check_out, guests, rooms
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    trend = build_price_trend(snapshots, days=days)
+    return PriceTrendResponse(
+        hotel_id=hotel_id,
+        check_in=check_in,
+        check_out=check_out,
+        guests=guests,
+        rooms=rooms,
+        days=days,
+        current_lowest=trend["current_lowest"],
+        historical_lowest=trend["historical_lowest"],
+        historical_average=trend["historical_average"],
+        change_from_lowest=trend["change_from_lowest"],
+        change_from_average=trend["change_from_average"],
+        points=[PriceTrendPoint(**point) for point in trend["points"]],
     )
