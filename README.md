@@ -2,7 +2,7 @@
 
 比较同一家酒店在 **去哪儿、智行、高德** 的价格。
 
-> 当前版本是 MVP：三家平台先使用模拟数据，重点把“统一查询条件 → 酒店标准化/匹配 → 标准化价格 → 最低价比较 → 价格快照”的流程跑通。真实平台数据接入将在后续通过官方或授权接口完成。
+> 当前版本是 MVP：三家平台先使用模拟数据，重点把“统一查询条件 → 酒店标准化/匹配 → 标准化价格 → 最低价比较 → 价格快照 → 降价提醒”的流程跑通。真实平台数据接入将在后续通过官方或授权接口完成。
 
 ## 当前功能
 
@@ -18,6 +18,9 @@
 - 跨平台酒店匹配评分 `match_score`
 - PostgreSQL 数据库 Schema
 - 价格快照 Repository 与历史记录 Service
+- 历史价格趋势 API
+- 降价提醒 API：创建、查询、启停、检查
+- GitHub Actions 定时检查骨架
 - 基础自动化测试
 
 ## 酒店标准化与跨平台匹配
@@ -45,6 +48,19 @@
 
 数据库连接通过 `DATABASE_URL` 配置；没有配置 PostgreSQL 时，MVP 仍可使用内存 Repository 运行和测试。
 
+## 降价提醒
+
+价格提醒以“酒店 + 入住条件 + 目标价格”为单位。当前提供：
+
+- `POST /api/price-alerts` 创建提醒
+- `GET /api/price-alerts` 查询提醒，可按 `hotel_id` 筛选
+- `PATCH /api/price-alerts/{id}?enabled=true|false` 启停提醒
+- `POST /api/price-alerts/check` 根据最近价格快照检查是否达到目标价
+
+数据库表位于 `database/migrations/002_price_alerts.sql`。
+
+GitHub Actions 工作流位于 `.github/workflows/price-monitor.yml`，支持手动触发和每天一次的定时检查。需要在仓库 Secrets 中配置 `MONITOR_API_URL`，例如部署后的后端基础地址。当前工作流只调用项目公开 API，不涉及登录、验证码或风控绕过。
+
 ## 项目结构
 
 ```text
@@ -56,31 +72,37 @@ hotel-price-comparator/
 │   ├── .env.example
 │   ├── models/
 │   │   ├── hotel.py
-│   │   └── schemas.py
+│   │   ├── schemas.py
+│   │   ├── history_schemas.py
+│   │   └── alert_schemas.py
 │   ├── providers/
 │   ├── repositories/
 │   │   ├── hotel_repository.py
-│   │   └── price_repository.py
+│   │   ├── price_repository.py
+│   │   ├── postgres_hotel_repository.py
+│   │   ├── postgres_price_repository.py
+│   │   ├── alert_repository.py
+│   │   └── postgres_alert_repository.py
 │   └── services/
 │       ├── comparator.py
 │       ├── normalizer.py
 │       ├── hotel_matcher.py
 │       ├── search_service.py
-│       └── price_history.py
+│       ├── price_history.py
+│       ├── price_trend.py
+│       └── price_alert.py
 ├── database/
-│   └── schema.sql
+│   ├── schema.sql
+│   └── migrations/
+│       └── 002_price_alerts.sql
 ├── frontend/
 │   ├── app/
-│   │   ├── page.js
-│   │   ├── layout.js
-│   │   └── globals.css
 │   ├── next.config.mjs
 │   ├── package.json
 │   └── README.md
+├── .github/workflows/
+│   └── price-monitor.yml
 └── tests/
-    ├── test_comparator.py
-    ├── test_hotel_matcher.py
-    └── test_price_history.py
 ```
 
 ## 本地运行
@@ -131,6 +153,20 @@ npm run dev
 }
 ```
 
+### POST `/api/price-alerts`
+
+```json
+{
+  "hotel_id": 1,
+  "check_in": "2026-10-10",
+  "check_out": "2026-10-12",
+  "guests": 2,
+  "rooms": 1,
+  "target_price": 550,
+  "currency": "CNY"
+}
+```
+
 ## 测试
 
 ```bash
@@ -146,8 +182,11 @@ pytest ../tests -q
 - [x] PostgreSQL 数据库 Schema
 - [x] 将酒店匹配接入实际搜索流程
 - [x] 价格历史记录基础 Repository / Service
-- [ ] PostgreSQL 价格快照持久化
-- [ ] 历史价格查询 API
-- [ ] 价格监控与降价提醒
+- [x] PostgreSQL 价格快照持久化
+- [x] 历史价格查询与趋势 API
+- [x] 价格监控与降价提醒 API
+- [x] GitHub Actions 定时监控骨架
+- [ ] 前端价格趋势图与降价提醒设置
 - [ ] 根据平台官方/授权接口接入真实价格
-- [ ] GitHub Actions 定时任务
+- [ ] 部署后端与 PostgreSQL
+- [ ] 接入邮件/微信等通知渠道
