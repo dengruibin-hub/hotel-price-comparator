@@ -27,6 +27,9 @@ class HotelPrice(BaseModel):
 
 class CompareResponse(BaseModel):
     hotel_name: str
+    canonical_hotel_id: str
+    matched_sources: list[str]
+    match_score: float = Field(ge=0, le=1)
     check_in: date
     check_out: date
     guests: int
