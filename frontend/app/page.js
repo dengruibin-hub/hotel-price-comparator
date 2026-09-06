@@ -3,6 +3,34 @@
 import { useState } from 'react';
 
 const platformNames = { qunar: '去哪儿', zhixing: '智行', amap: '高德' };
+const isStaticDemo = process.env.NEXT_PUBLIC_GITHUB_PAGES === 'true';
+
+const demoPrices = [
+  { source: 'qunar', room_name: '高级大床房', price: 598, breakfast: true, cancelable: true },
+  { source: 'zhixing', room_name: '高级大床房', price: 568, breakfast: true, cancelable: true },
+  { source: 'amap', room_name: '高级大床房', price: 620, breakfast: true, cancelable: true },
+];
+
+function buildDemoResult(form) {
+  const lowest = Math.min(...demoPrices.map((item) => item.price));
+  const highest = Math.max(...demoPrices.map((item) => item.price));
+  return {
+    hotel_name: form.hotel_name,
+    canonical_hotel_id: 'github-pages-demo-001',
+    hotel_db_id: null,
+    matched_sources: ['qunar', 'zhixing', 'amap'],
+    match_score: 0.96,
+    check_in: form.check_in,
+    check_out: form.check_out,
+    guests: Number(form.guests),
+    rooms: Number(form.rooms),
+    prices: demoPrices,
+    lowest_price: lowest,
+    lowest_source: 'zhixing',
+    highest_price: highest,
+    savings: highest - lowest,
+  };
+}
 
 export default function PriceDashboard() {
   const [form, setForm] = useState({ hotel_name: '上海外滩某酒店', check_in: '2026-10-10', check_out: '2026-10-12', guests: 2, rooms: 1 });
@@ -16,12 +44,20 @@ export default function PriceDashboard() {
   function update(key, value) { setForm((current) => ({ ...current, [key]: value })); }
 
   async function compare() {
-    setLoading(true); setError(''); setAlertCreated(false);
+    setLoading(true); setError(''); setAlertCreated(false); setTrend(null);
+
+    if (isStaticDemo) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setResult(buildDemoResult(form));
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/compare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, guests: Number(form.guests), rooms: Number(form.rooms) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || '比价失败');
-      setResult(data); setTrend(null);
+      setResult(data);
       if (data.hotel_db_id) {
         const params = new URLSearchParams({ hotel_id: data.hotel_db_id, check_in: data.check_in, check_out: data.check_out, guests: data.guests, rooms: data.rooms, days: 30 });
         const trendResponse = await fetch(`/api/price-trend?${params}`);
@@ -32,7 +68,7 @@ export default function PriceDashboard() {
   }
 
   async function createAlert() {
-    if (!result?.hotel_db_id) return;
+    if (!result?.hotel_db_id || isStaticDemo) return;
     setError('');
     try {
       const response = await fetch('/api/price-alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hotel_id: result.hotel_db_id, check_in: result.check_in, check_out: result.check_out, guests: result.guests, rooms: result.rooms, target_price: Number(targetPrice), currency: 'CNY' }) });
@@ -59,10 +95,10 @@ export default function PriceDashboard() {
         <div className="match-info">跨平台匹配度 <strong>{Math.round(result.match_score * 100)}%</strong> · 已匹配：{result.matched_sources.map((source) => platformNames[source] || source).join('、')}</div>
         <div className="cards">{result.prices.map((item) => { const lowest = item.price === result.lowest_price; return <article className={`price-card ${lowest ? 'lowest' : ''}`} key={item.source}>{lowest && <div className="badge">最低价</div>}<div className="platform">{platformNames[item.source] || item.source}</div><h3>{item.room_name}</h3><div className="price">¥{item.price}<small>/间</small></div><div className="features"><span>{item.breakfast ? '✓ 含早餐' : '× 不含早餐'}</span><span>{item.cancelable ? '✓ 免费取消' : '× 不可取消'}</span></div></article>; })}</div>
         <div className="insights-grid">
-          <section className="panel"><div className="panel-head"><div><small>PRICE HISTORY</small><h3>历史价格趋势</h3></div><span className="pill">近 30 天</span></div>{trend?.points?.length ? <div className="trend-list">{trend.points.map((point, index) => <div className="trend-row" key={`${point.checked_at}-${index}`}><span>{new Date(point.checked_at).toLocaleDateString()}</span><b>¥{point.lowest ?? '—'}</b><span>{point.qunar != null ? `去哪儿 ¥${point.qunar}` : ''}</span><span>{point.zhixing != null ? `智行 ¥${point.zhixing}` : ''}</span><span>{point.amap != null ? `高德 ¥${point.amap}` : ''}</span></div>)}</div> : <div className="empty-trend">配置 DATABASE_URL 后，每次比价会自动保存快照并显示历史趋势。</div>}</section>
-          <section className="panel alert-panel"><div><small>PRICE ALERT</small><h3>降价提醒</h3><p>当最终价格低于你的目标价时，记录触发时间。</p></div><div className="alert-form"><label>目标价格<input type="number" min="0" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} /></label><button onClick={createAlert} disabled={!result?.hotel_db_id}>设置提醒</button></div>{!result?.hotel_db_id && <div className="alert-hint">需要启用 PostgreSQL 后才能建立持久化提醒。</div>}{alertCreated && <div className="success">✓ 降价提醒已创建</div>}</section>
+          <section className="panel"><div className="panel-head"><div><small>PRICE HISTORY</small><h3>历史价格趋势</h3></div><span className="pill">近 30 天</span></div>{trend?.points?.length ? <div className="trend-list">{trend.points.map((point, index) => <div className="trend-row" key={`${point.checked_at}-${index}`}><span>{new Date(point.checked_at).toLocaleDateString()}</span><b>¥{point.lowest ?? '—'}</b><span>{point.qunar != null ? `去哪儿 ¥${point.qunar}` : ''}</span><span>{point.zhixing != null ? `智行 ¥${point.zhixing}` : ''}</span><span>{point.amap != null ? `高德 ¥${point.amap}` : ''}</span></div>)}</div> : <div className="empty-trend">{isStaticDemo ? 'GitHub Pages 当前展示演示数据；接入后端后可查看真实历史趋势。' : '配置 DATABASE_URL 后，每次比价会自动保存快照并显示历史趋势。'}</div>}</section>
+          <section className="panel alert-panel"><div><small>PRICE ALERT</small><h3>降价提醒</h3><p>当最终价格低于你的目标价时，记录触发时间。</p></div><div className="alert-form"><label>目标价格<input type="number" min="0" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} /></label><button onClick={createAlert} disabled={!result?.hotel_db_id || isStaticDemo}>设置提醒</button></div>{isStaticDemo ? <div className="alert-hint">GitHub Pages 是静态演示站；持久化提醒需要连接后端和 PostgreSQL。</div> : !result?.hotel_db_id && <div className="alert-hint">需要启用 PostgreSQL 后才能建立持久化提醒。</div>}{alertCreated && <div className="success">✓ 降价提醒已创建</div>}</section>
         </div>
-        <div className="note">当前为 MVP 模拟价格。真实平台数据将在后续通过官方或授权接口接入。</div>
+        <div className="note">{isStaticDemo ? '当前为 GitHub Pages 演示模式：页面可直接在线体验，价格为 MVP 模拟数据。' : '当前为 MVP 模拟价格。真实平台数据将在后续通过官方或授权接口接入。'}</div>
       </section>}
     </main>
   );
