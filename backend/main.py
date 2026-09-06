@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 
+from models.alert_schemas import PriceAlertCheckResult, PriceAlertCreate, PriceAlertResponse
 from models.history_schemas import (
     PriceHistoryResponse,
     PriceSnapshotCreate,
@@ -10,9 +11,12 @@ from models.history_schemas import (
     PriceTrendResponse,
 )
 from models.schemas import CompareRequest, CompareResponse
+from repositories.alert_repository import InMemoryPriceAlertRepository, PriceAlert
+from repositories.postgres_alert_repository import PostgresPriceAlertRepository
 from repositories.price_repository import InMemoryPriceSnapshotRepository, PriceSnapshot
 from repositories.postgres_price_repository import PostgresPriceSnapshotRepository
 from services.comparator import compare_prices
+from services.price_alert import check_and_update_alerts
 from services.price_trend import build_price_trend
 
 app = FastAPI(
@@ -22,6 +26,7 @@ app = FastAPI(
 )
 
 _history_repository = InMemoryPriceSnapshotRepository()
+_alert_repository = InMemoryPriceAlertRepository()
 
 
 def get_history_repository():
@@ -29,6 +34,29 @@ def get_history_repository():
     from database import DATABASE_URL
 
     return PostgresPriceSnapshotRepository() if DATABASE_URL else _history_repository
+
+
+def get_alert_repository():
+    """Use PostgreSQL when DATABASE_URL is configured, otherwise memory."""
+    from database import DATABASE_URL
+
+    return PostgresPriceAlertRepository() if DATABASE_URL else _alert_repository
+
+
+def alert_response(alert: PriceAlert) -> PriceAlertResponse:
+    return PriceAlertResponse(
+        id=alert.id,
+        hotel_id=alert.hotel_id,
+        check_in=alert.check_in,
+        check_out=alert.check_out,
+        guests=alert.guests,
+        rooms=alert.rooms,
+        target_price=alert.target_price,
+        currency=alert.currency,
+        enabled=alert.enabled,
+        created_at=alert.created_at,
+        triggered_at=alert.triggered_at,
+    )
 
 
 @app.get("/health")
@@ -172,3 +200,71 @@ def price_trend(
         change_from_average=trend["change_from_average"],
         points=[PriceTrendPoint(**point) for point in trend["points"]],
     )
+
+
+@app.post("/api/price-alerts", response_model=PriceAlertResponse, status_code=201)
+def create_price_alert(request: PriceAlertCreate) -> PriceAlertResponse:
+    if request.check_out <= request.check_in:
+        raise HTTPException(status_code=422, detail="check_out must be after check_in")
+    alert = PriceAlert(
+        id=0,
+        hotel_id=request.hotel_id,
+        check_in=request.check_in,
+        check_out=request.check_out,
+        guests=request.guests,
+        rooms=request.rooms,
+        target_price=request.target_price,
+        currency=request.currency,
+        enabled=request.enabled,
+        created_at=datetime.now(timezone.utc),
+    )
+    try:
+        return alert_response(get_alert_repository().create(alert))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/price-alerts", response_model=list[PriceAlertResponse])
+def list_price_alerts(
+    hotel_id: int | None = Query(default=None, ge=1),
+) -> list[PriceAlertResponse]:
+    try:
+        return [alert_response(item) for item in get_alert_repository().list_alerts(hotel_id)]
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.patch("/api/price-alerts/{alert_id}", response_model=PriceAlertResponse)
+def update_price_alert(alert_id: int, enabled: bool = Query()) -> PriceAlertResponse:
+    if alert_id < 1:
+        raise HTTPException(status_code=422, detail="alert_id must be positive")
+    try:
+        repository = get_alert_repository()
+        alert = repository.get(alert_id)
+        if alert is None:
+            raise HTTPException(status_code=404, detail="price alert not found")
+        updated = PriceAlert(
+            id=alert.id,
+            hotel_id=alert.hotel_id,
+            check_in=alert.check_in,
+            check_out=alert.check_out,
+            guests=alert.guests,
+            rooms=alert.rooms,
+            target_price=alert.target_price,
+            currency=alert.currency,
+            enabled=enabled,
+            created_at=alert.created_at,
+            triggered_at=alert.triggered_at,
+        )
+        return alert_response(repository.update(updated))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/price-alerts/check", response_model=list[PriceAlertCheckResult])
+def check_price_alerts() -> list[PriceAlertCheckResult]:
+    try:
+        results = check_and_update_alerts(get_alert_repository(), get_history_repository())
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return [PriceAlertCheckResult(**result) for result in results]
