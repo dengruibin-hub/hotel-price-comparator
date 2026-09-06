@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
-      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./database/migrations/002_price_alerts.sql:/docker-entrypoint-initdb.d/002-price-alerts.sql:ro
 
   backend:
     build: ./backend
