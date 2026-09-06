@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
+from models.hotel import HotelCandidate
 from models.schemas import CompareRequest, HotelPrice
-from services.hotel_matcher import HotelCandidate, match_hotel
+from services.hotel_matcher import match_candidates
 
 
 @dataclass
@@ -13,46 +14,21 @@ class SearchResult:
 
 
 def search_and_compare(request: CompareRequest) -> SearchResult:
-    """Run the MVP hotel matching flow before comparing normalized prices.
+    """Run hotel matching before comparing normalized prices.
 
-    Provider results are still simulated. The important part is that the
-    comparison now has a canonical hotel identity and an explicit match score.
+    Platform hotel records and prices are still simulated in this MVP.
     """
     candidates = [
-        HotelCandidate(
-            source="qunar",
-            source_hotel_id="qunar-demo-001",
-            name=request.hotel_name,
-            address="上海市黄浦区外滩附近",
-            latitude=31.2400,
-            longitude=121.4900,
-            phone="021-60000000",
-        ),
-        HotelCandidate(
-            source="zhixing",
-            source_hotel_id="zhixing-demo-001",
-            name=request.hotel_name,
-            address="上海市黄浦区外滩附近",
-            latitude=31.2402,
-            longitude=121.4901,
-            phone="021-60000000",
-        ),
-        HotelCandidate(
-            source="amap",
-            source_hotel_id="amap-demo-001",
-            name=request.hotel_name,
-            address="上海市黄浦区外滩附近",
-            latitude=31.2399,
-            longitude=121.4902,
-            phone="021-60000000",
-        ),
+        HotelCandidate("qunar", "qunar-demo-001", request.hotel_name, "上海市黄浦区外滩附近", 31.2400, 121.4900, "021-60000000"),
+        HotelCandidate("zhixing", "zhixing-demo-001", request.hotel_name, "上海市黄浦区外滩附近", 31.2402, 121.4901, "021-60000000"),
+        HotelCandidate("amap", "amap-demo-001", request.hotel_name, "上海市黄浦区外滩附近", 31.2399, 121.4902, "021-60000000"),
     ]
 
-    matched = match_hotel(candidates)
+    canonical, match_score, matched_candidates = match_candidates(candidates)
 
+    from providers.amap.provider import AmapProvider
     from providers.qunar.provider import QunarProvider
     from providers.zhixing.provider import ZhixingProvider
-    from providers.amap.provider import AmapProvider
 
     prices = (
         QunarProvider().get_prices(request)
@@ -61,8 +37,8 @@ def search_and_compare(request: CompareRequest) -> SearchResult:
     )
 
     return SearchResult(
-        hotel=matched.canonical_hotel,
-        match_score=matched.match_score,
-        matched_sources=sorted(candidate.source for candidate in matched.matched_candidates),
+        hotel=canonical,
+        match_score=match_score,
+        matched_sources=sorted(candidate.source for candidate in matched_candidates),
         prices=prices,
     )
