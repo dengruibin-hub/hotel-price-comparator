@@ -22,10 +22,7 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def match_hotel(canonical: HotelCandidate, candidate: HotelCandidate) -> HotelMatchResult:
-    """Score whether two platform records represent the same physical hotel.
-
-    The score deliberately combines several signals instead of trusting the name alone.
-    """
+    """Score whether two platform records represent the same physical hotel."""
     name_score = _similarity(canonical.name, candidate.name)
     address_score = _similarity(canonical.address, candidate.address)
     phone_equal = bool(normalize_phone(canonical.phone)) and normalize_phone(canonical.phone) == normalize_phone(candidate.phone)
@@ -34,16 +31,14 @@ def match_hotel(canonical: HotelCandidate, candidate: HotelCandidate) -> HotelMa
     if None not in (canonical.latitude, canonical.longitude, candidate.latitude, candidate.longitude):
         distance_km = _distance_km(canonical.latitude, canonical.longitude, candidate.latitude, candidate.longitude)
 
-    score = 0.0
+    score = name_score * 0.55 + address_score * 0.25
     reasons: list[str] = []
 
-    score += name_score * 0.55
     if name_score >= 0.9:
         reasons.append("hotel names are highly similar")
     elif name_score >= 0.75:
         reasons.append("hotel names are similar")
 
-    score += address_score * 0.25
     if address_score >= 0.8:
         reasons.append("addresses are similar")
 
@@ -59,13 +54,25 @@ def match_hotel(canonical: HotelCandidate, candidate: HotelCandidate) -> HotelMa
         score += 0.05
         reasons.append("phone numbers match")
 
-    # Require more than a name-only match. This reduces false positives for
-    # hotels with generic names such as "Holiday Inn" or "Grand Hotel".
     has_secondary_signal = address_score >= 0.55 or phone_equal or (distance_km is not None and distance_km <= 1.0)
     matched = score >= 0.72 and has_secondary_signal
 
-    return HotelMatchResult(
-        matched=matched,
-        match_score=round(min(score, 1.0), 4),
-        reasons=tuple(reasons),
-    )
+    return HotelMatchResult(matched=matched, match_score=round(min(score, 1.0), 4), reasons=tuple(reasons))
+
+
+def match_candidates(candidates: list[HotelCandidate]) -> tuple[HotelCandidate, float, list[HotelCandidate]]:
+    """Pick the first candidate as canonical and verify every other source against it."""
+    if not candidates:
+        raise ValueError("No hotel candidates returned")
+
+    canonical = candidates[0]
+    matched_candidates = [canonical]
+    scores: list[float] = [1.0]
+
+    for candidate in candidates[1:]:
+        result = match_hotel(canonical, candidate)
+        if result.matched:
+            matched_candidates.append(candidate)
+            scores.append(result.match_score)
+
+    return canonical, round(min(scores), 4), matched_candidates
