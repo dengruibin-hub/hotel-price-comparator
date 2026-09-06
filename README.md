@@ -9,9 +9,11 @@
 - FastAPI 后端
 - `/health` 健康检查
 - `/api/compare` 酒店价格比价接口
-- 三个平台 Provider 接口骨架
+- 去哪儿、智行、高德 Provider 接口骨架
 - 统一价格数据结构
 - 最低价、最高价、节省金额计算
+- Next.js 前端搜索页面
+- 三家平台价格卡片与最低价高亮
 - 基础自动化测试
 
 ## 项目结构
@@ -22,19 +24,23 @@ hotel-price-comparator/
 │   ├── main.py
 │   ├── requirements.txt
 │   ├── models/
-│   │   └── schemas.py
 │   ├── providers/
-│   │   ├── base.py
-│   │   ├── qunar/provider.py
-│   │   ├── zhixing/provider.py
-│   │   └── amap/provider.py
 │   └── services/
-│       └── comparator.py
+├── frontend/
+│   ├── app/
+│   │   ├── page.js
+│   │   ├── layout.js
+│   │   └── globals.css
+│   ├── next.config.mjs
+│   ├── package.json
+│   └── README.md
 └── tests/
     └── test_comparator.py
 ```
 
 ## 本地运行
+
+### 1. 启动后端
 
 ```bash
 cd backend
@@ -44,13 +50,27 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Windows PowerShell
-# .venv\Scripts\Activate.ps1
+# .venv\\Scripts\\Activate.ps1
 
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-打开：`http://127.0.0.1:8000/docs`
+后端文档：`http://127.0.0.1:8000/docs`
+
+### 2. 启动前端
+
+新开一个终端：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+然后打开：`http://localhost:3000`
+
+前端会将 `/api/compare` 代理到本地 FastAPI。
 
 ## API 示例
 
@@ -66,8 +86,6 @@ uvicorn main:app --reload
 }
 ```
 
-返回结果会包含三家平台的模拟价格，以及最低价平台。
-
 ## 测试
 
 ```bash
@@ -75,11 +93,12 @@ cd backend
 pytest ../tests -q
 ```
 
-## 后续路线
+## 开发路线
 
-1. 完成前端搜索页面和比价卡片
-2. 增加酒店标准化与跨平台酒店匹配
-3. 增加 PostgreSQL 数据库
-4. 增加价格历史记录和价格监控
-5. 根据平台官方/授权接口接入真实价格
-6. 增加 GitHub Actions 定时任务
+- [x] 后端比价 MVP
+- [x] 前端搜索与价格展示
+- [ ] 酒店标准化与跨平台酒店匹配
+- [ ] PostgreSQL 数据库
+- [ ] 价格历史记录和价格监控
+- [ ] 根据平台官方/授权接口接入真实价格
+- [ ] GitHub Actions 定时任务
